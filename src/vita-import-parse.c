@@ -143,6 +143,23 @@ int process_libraries(yaml_node *parent, yaml_node *child, vita_imports_lib_t *i
 	return 0;
 }
 
+int process_includes(yaml_node *entry, vita_imports_lib_t *import) {
+	if(!is_scalar(entry)) {
+		fprintf(stderr, "error: line: %zd, column: %zd, expecting include value to be scalar, got '%s'.\n", entry->position.line, entry->position.column, node_type_str(entry));
+		return -1;
+	}
+	
+	yaml_scalar *key = &entry->data.scalar;
+	int keySize = strlen(key->value);
+	
+	import->n_includes++;
+	import->includes[import->n_includes - 1] = malloc(keySize + 1);
+
+	strcpy(import->includes[import->n_includes - 1], key->value);
+
+	return 0;
+}
+
 int process_import(yaml_node *parent, yaml_node *child, vita_imports_lib_t *import) {
 	if (!is_scalar(parent)) {
 		fprintf(stderr, "error: line: %zd, column: %zd, expecting module key to be scalar, got '%s'.\n", parent->position.line, parent->position.column, node_type_str(parent));
@@ -167,6 +184,10 @@ int process_import(yaml_node *parent, yaml_node *child, vita_imports_lib_t *impo
 		if (yaml_iterate_mapping(child, (mapping_functor)process_libraries, import) < 0)
 			return -1;
 
+	}
+	else if (strcmp(key->value, "include") == 0) {
+		if (yaml_iterate_sequence(child, (sequence_functor)process_includes, import) < 0)
+			return -1;
 	}
 	else {
 		fprintf(stderr, "error: line: %zd, column: %zd, unrecognised module key '%s'.\n", child->position.line, child->position.column, key->value);
@@ -241,6 +262,37 @@ vita_imports_t *read_vita_imports(yaml_document *doc) {
 			}
 		}
 	}
+
+	fprintf(stderr, "resolving includes\n");
+	for(int i = 0; i < imports->n_libs; i++) {
+		//if (imports->libs[i]->includes[i] != NULL)
+		//	fprintf(stderr, "Library %s as an include %d of module %s was not found within the YAML document.\n", imports->libs[i]->includes[0], imports->libs[i]->n_includes, imports->libs[i]->name);
+		for(int j = 0; j < imports->libs[i]->n_includes; j++) {
+			vita_imports_module_t *lib = NULL;
+
+			for(int x = 0; x < imports->n_libs; x++) {
+				for(int y = 0; y < imports->libs[x]->n_modules; y++)
+				{
+					lib = vita_imports_find_module_by_name(imports->libs[x], imports->libs[i]->includes[j]);
+					if(lib != NULL)
+						break;
+				}
+				if(lib != NULL)
+					break;
+			}
+
+			if(lib == NULL) {
+				fprintf(stderr, "Library %s as an include %d of module %s was not found within the YAML document.\n", imports->libs[i]->includes[0], imports->libs[i]->n_includes, imports->libs[i]->name);
+
+				return NULL;
+			}
+
+			imports->libs[i]->modules = realloc(imports->libs[i]->modules, (imports->libs[i]->n_modules + 1) * sizeof(vita_imports_module_t *));
+			imports->libs[i]->modules[imports->libs[i]->n_modules++] = lib;
+		}
+
+	}
+	fprintf(stderr, "fini");
 	
 	return imports;
 	

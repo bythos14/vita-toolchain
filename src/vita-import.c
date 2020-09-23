@@ -44,6 +44,7 @@ vita_imports_lib_t *vita_imports_lib_new(const char *name, uint32_t NID, int n_m
 	lib->name = strdup(name);
 	lib->NID = NID;
 	lib->n_modules = n_modules;
+	lib->n_includes = 0;
 
 	lib->modules = calloc(n_modules, sizeof(*lib->modules));
 
@@ -136,6 +137,28 @@ static vita_imports_common_fields *generic_find(vita_imports_common_fields **ent
 	return NULL;
 }
 
+static vita_imports_common_fields *generic_find_string(vita_imports_common_fields **entries, int n_entries, char* name) {
+	int i;
+	vita_imports_common_fields *entry;
+
+	for (i = 0; i < n_entries; i++) {
+		entry = entries[i];
+		if (entry == NULL) {
+			fprintf(stderr, "Continue\n");
+			continue;
+		}
+
+		fprintf(stderr, "%s is %s ?\n", entry->name, name);
+
+		if (strcmp(entry->name, name) == 0) {
+			fprintf(stderr, "Found\n");
+			return entry;
+		}
+	}
+
+	return NULL;
+}
+
 vita_imports_lib_t *vita_imports_find_lib(vita_imports_t *imp, uint32_t NID) {
 	return (vita_imports_lib_t *)generic_find((vita_imports_common_fields **)imp->libs, imp->n_libs, NID);
 }
@@ -147,4 +170,8 @@ vita_imports_stub_t *vita_imports_find_function(vita_imports_module_t *mod, uint
 }
 vita_imports_stub_t *vita_imports_find_variable(vita_imports_module_t *mod, uint32_t NID) {
 	return (vita_imports_stub_t *)generic_find((vita_imports_common_fields **)mod->variables, mod->n_variables, NID);
+}
+
+vita_imports_module_t *vita_imports_find_module_by_name(vita_imports_lib_t *lib, char* name) {
+	return (vita_imports_module_t *)generic_find_string((vita_imports_common_fields **)lib->modules, lib->n_modules, name);
 }
