@@ -134,6 +134,7 @@ int process_library(yaml_node *parent, yaml_node *child, vita_imports_lib_t *lib
 
 		library->flags |= (version << 16);
 	}
+	else if (strcmp(key->value, "stubname") == 0) {}
 	else {
 		fprintf(stderr, "error: line: %zd, column: %zd, unrecognised library key '%s'.\n", child->position.line, child->position.column, key->value);
 		return -1;

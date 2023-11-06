@@ -100,6 +100,10 @@ add_executable(vita-elf-export
   vita-elf-export/vita-elf-export.c
   utils/yamlemitter.c
 )
+add_executable(vita-db-gen
+  vita-db-gen/vita-db-gen.c
+  utils/yamlemitter.c
+)
 add_executable(vita-nid-check
   vita-nid-check/vita-nid-check.c
   vita-nid-check/vita-nid-bypass.c
@@ -124,6 +128,7 @@ target_link_libraries(vita-libs-gen-2 vita-yaml vita-export)
 target_link_libraries(vita-elf-create vita-export vita-import ${libelf_LIBRARIES} vita-yaml)
 target_link_libraries(vita-pack-vpk ${libzip_LIBRARIES} ${zlib_LIBRARIES})
 target_link_libraries(vita-elf-export vita-yaml vita-export)
+target_link_libraries(vita-db-gen vita-yaml vita-import)
 target_link_libraries(vita-make-fself ${zlib_LIBRARIES} vita-export)
 # vita-nid-check doesn't require vita-export, but adds it for linking errors
 target_link_libraries(vita-nid-check vita-yaml vita-export)
@@ -152,4 +157,5 @@ install(TARGETS vita-mksfoex DESTINATION bin)
 install(TARGETS vita-make-fself DESTINATION bin)
 install(TARGETS vita-pack-vpk DESTINATION bin)
 install(TARGETS vita-elf-export DESTINATION bin)
+install(TARGETS vita-db-gen DESTINATION bin)
 install(TARGETS vita-nid-check DESTINATION bin)
