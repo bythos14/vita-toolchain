@@ -504,6 +504,10 @@ sce_module_info_t *sce_elf_module_info_create(vita_elf_t *ve, vita_export_t *exp
 		set_module_import(ve, module_info->import_top + i, liblist.libs + i);
 	}
 
+	module_info->tls_start = (ve->tls_addr != 0) ? vita_elf_vaddr_to_host(ve, ve->tls_addr) : NULL;
+	module_info->tls_filesz = ve->tls_filesz;
+	module_info->tls_memsz = ve->tls_memsz;
+
 	// fake param. Required for old fw.
 	if (ve->module_sdk_version < VITA_TOOLCHAIN_PROCESS_PARAM_NEW_FORMAT_VERSION) {
 		module_info->exidx_top = ve->segments[0].vaddr_top + 0;
@@ -536,6 +540,8 @@ int sce_elf_module_info_get_size(sce_module_info_t *module_info, sce_section_siz
 	INCR(sceModuleInfo_rodata, params->process_param_size);
 	if (have_libc)
 		INCR(sceModuleInfo_rodata, sizeof(sce_libc_param_raw));
+	if (module_info->tls_memsz != 0)
+		INCR(sceModuleInfo_rodata, sizeof(tls_desc_region_info_raw));
 
 	for (export = module_info->export_top; export < module_info->export_end; export++) {
 		INCR(sceLib_ent, sizeof(sce_module_exports_raw));
@@ -640,6 +646,7 @@ void *sce_elf_module_info_encode(
 	sce_module_info_raw *module_info_raw;
 	sce_libc_param_t *libc_param = params->libc_param;
 	sce_libc_param_raw *libc_param_raw;
+	tls_desc_region_info_raw *tls_region_info = NULL;
 	sce_module_exports_raw *export_raw;
 	sce_module_imports_raw *import_raw;
 	varray relas;
@@ -840,7 +847,10 @@ void *sce_elf_module_info_encode(
 	module_info_raw->import_top = htole32(OFFSET(sceLib_stubs));
 	module_info_raw->import_end = htole32(OFFSET(sceLib_stubs) + sizes->sceLib_stubs);
 	CONVERT32(module_info, module_nid);
-	CONVERT32(module_info, tls_start);
+	if (module_info->tls_start != NULL) {
+		module_info_raw->tls_start = htole32(vita_elf_host_to_vaddr(ve, module_info->tls_start));
+		ADDRELA(&module_info_raw->tls_start);
+	}
 	CONVERT32(module_info, tls_filesz);
 	CONVERT32(module_info, tls_memsz);
 	if(module_info->module_start != NULL){
@@ -859,6 +869,21 @@ void *sce_elf_module_info_encode(
 	CONVERTOFFSET(module_info, exidx_end);
 	CONVERTOFFSET(module_info, extab_top);
 	CONVERTOFFSET(module_info, extab_end);
+
+	if (module_info->tls_memsz != 0) {
+		tls_region_info = ADDR(sceModuleInfo_rodata) + libc_param_offset + ((libc_param != NULL) ? sizeof(*libc_param_raw) : 0);
+		tls_region_info->size = htole16(sizeof(tls_region_info));
+		tls_region_info->unk = htole16(0x1);
+		tls_region_info->start = htole32(ve->tls_desc_start); // Descriptors after first three reserved entries
+		ADDRELA(&tls_region_info->start);
+		tls_region_info->end = htole32(ve->tls_desc_end);
+		ADDRELA(&tls_region_info->end);
+
+		if (get_variable_by_symbol("_tls_region_info", ve, &ve->tls_desc_region_rela->offset) == 1) {
+			ve->tls_desc_region_rela->addend = VADDR(sceModuleInfo_rodata) + libc_param_offset + ((libc_param != NULL) ? sizeof(*libc_param_raw) : 0);
+			ve->tls_desc_region_rela->type = R_ARM_ABS32;
+		}
+	}
 
 	for (export = module_info->export_top; export < module_info->export_end; export++) {
 		int num_syms;
@@ -998,6 +1023,8 @@ void *sce_elf_module_info_encode(
 	INCR(sceModuleInfo_rodata, params->process_param_size);
 	if (libc_param != NULL)
 		INCR(sceModuleInfo_rodata, sizeof(sce_libc_param_raw));
+	if (tls_region_info != NULL)
+		INCR(sceModuleInfo_rodata, sizeof(tls_desc_region_info_raw));
 
 	for (i = 0; i < sizeof(sce_section_sizes_t) / sizeof(Elf32_Word); i++) {
 		if (((Elf32_Word *)&cur_sizes)[i] != ((Elf32_Word *)sizes)[i])

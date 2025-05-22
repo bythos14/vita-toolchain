@@ -90,6 +90,13 @@ typedef struct vita_elf_t {
 
 	vita_elf_segment_info_t *segments;
 	int num_segments;
+
+	Elf32_Addr tls_desc_start;
+	Elf32_Addr tls_desc_end;
+	Elf32_Addr tls_addr;
+	int tls_filesz;
+	int tls_memsz;
+	vita_elf_rela_t *tls_desc_region_rela;
 } vita_elf_t;
 
 vita_elf_t *vita_elf_load(const char *filename, int check_stub_count, vita_export_t *export);

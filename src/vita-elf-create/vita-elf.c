@@ -78,7 +78,7 @@ static int fixup_vstub_rela(vita_elf_t *ve, uint8_t *code, Elf32_Addr rel_vaddr)
 		break;
 	case R_ARM_TARGET2: /* Target 2 is handled like REL32 on Vita*/
 	case R_ARM_REL32:
-		*(Elf32_Word *)rel_addr = 0 - rel_vaddr;
+		*(Elf32_Word *)rel_addr = htole32(0 - rel_vaddr);
 
 		*code = R_ARM_NONE;
 		break;
@@ -342,6 +342,7 @@ static int get_rel_handling(int type)
 		case R_ARM_MOVT_ABS:
 		case R_ARM_THM_MOVW_ABS_NC:
 		case R_ARM_THM_MOVT_ABS:
+		case R_ARM_TLS_LE32:
 			return REL_HANDLE_NORMAL;
 	}
 
@@ -371,7 +372,7 @@ static int load_rel_table(vita_elf_t *ve, Elf_Scn *scn)
 	rtable = calloc(1, sizeof(vita_elf_rela_table_t));
 	ASSERT(rtable != NULL);
 	rtable->num_relas = shdr.sh_size / shdr.sh_entsize;
-	rtable->relas = calloc(rtable->num_relas, sizeof(vita_elf_rela_t));
+	rtable->relas = calloc(rtable->num_relas + ((ve->tls_desc_region_rela == NULL) ? 1 : 0), sizeof(vita_elf_rela_t));
 	ASSERT(rtable->relas != NULL);
 
 	rtable->target_ndx = shdr.sh_info;
@@ -414,6 +415,11 @@ static int load_rel_table(vita_elf_t *ve, Elf_Scn *scn)
 		else if (handling == REL_HANDLE_INVALID)
 			FAILX("Invalid relocation type %d!", currela->type);
 
+		if (currela->type == R_ARM_TLS_LE32) {
+			currela->type = R_ARM_NONE;
+			continue;
+		}
+
 		rel_sym = GELF_R_SYM(rel.r_info);
 		if (rel_sym >= ve->num_symbols)
 			FAILX("REL entry tried to access symbol %d, but only %d symbols loaded", rel_sym, ve->num_symbols);
@@ -433,6 +439,11 @@ static int load_rel_table(vita_elf_t *ve, Elf_Scn *scn)
 			currela->addend = target - (currela->symbol->value & 0xFFFFFFFE);
 		else
 			currela->addend = target - currela->symbol->value;
+	}
+
+	if (ve->tls_desc_region_rela == NULL) {
+		ve->tls_desc_region_rela = rtable->relas + rtable->num_relas++;
+		ve->tls_desc_region_rela->type = R_ARM_NONE;
 	}
 
 	rtable->next = ve->rela_tables;
@@ -599,6 +610,9 @@ vita_elf_t *vita_elf_load(const char *filename, int check_stub_count, vita_expor
 			varray_push(&ve->vstubs_va,&ndxscn);
 			if (!load_stubs(scn, &ve->num_vstubs, &ve->vstubs, name))
 				goto failure;
+		} else if (shdr.sh_type == SHT_PROGBITS && strncmp(name, ".tdesc", strlen(".tdesc")) == 0) {
+			ve->tls_desc_start = shdr.sh_addr;
+			ve->tls_desc_end = shdr.sh_addr + shdr.sh_size;
 		}
 
 		if (shdr.sh_type == SHT_SYMTAB) {
@@ -643,7 +657,12 @@ vita_elf_t *vita_elf_load(const char *filename, int check_stub_count, vita_expor
 	for (segndx = 0; segndx < segment_count; segndx++) {
 		ELF_ASSERT(gelf_getphdr(ve->elf, segndx, &phdr));
 
-		if (phdr.p_type != PT_LOAD) {
+		if (phdr.p_type == PT_TLS) {
+			ve->tls_addr = phdr.p_vaddr;
+			ve->tls_filesz = phdr.p_filesz;
+			ve->tls_memsz = phdr.p_memsz;
+			continue;
+		} else if (phdr.p_type != PT_LOAD) {
 			continue; // skip non-loadable segments
 		}
 
