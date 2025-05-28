@@ -12,7 +12,7 @@ int elf_utils_duplicate_scn_contents(Elf *e, int scndx);
 int elf_utils_duplicate_shstrtab(Elf *e);
 void elf_utils_free_scn_contents(Elf *e, int scndx);
 
-int elf_utils_shift_contents(Elf *e, int start_offset, int shift_amount);
+int elf_utils_shift_contents(Elf *e, int start_offset, Elf32_Addr start_addr, int shift_amount);
 
 Elf_Scn *elf_utils_new_scn_with_name(Elf *e, const char *scn_name);
 

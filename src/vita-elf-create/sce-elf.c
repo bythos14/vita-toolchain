@@ -662,15 +662,6 @@ void *sce_elf_module_info_encode(
 	start_offset = ve->segments[segndx].memsz;
 	start_offset = (start_offset + (sce_module_info_alignment_value - 1)) & ~(sce_module_info_alignment_value - 1);
 
-	for (i = 0; i < ve->num_segments; i++) {
-		if (i == segndx)
-			continue;
-		if (ve->segments[i].vaddr >= segment_base + start_offset
-				&& ve->segments[i].vaddr < segment_base + start_offset + total_size)
-			FAILX("Cannot allocate %d bytes for SCE data at end of segment %d; segment %d overlaps",
-					total_size, segndx, i);
-	}
-
 	data = calloc(1, total_size);
 	ASSERT(data != NULL);
 
@@ -1077,7 +1068,7 @@ int sce_elf_write_module_info(
 	start_foffset = phdr.p_offset + start_segoffset;
 	cur_pos = 0;
 
-	if (!elf_utils_shift_contents(dest, start_foffset, total_size))
+	if (!elf_utils_shift_contents(dest, start_foffset, start_vaddr, total_size))
 		FAILX("Unable to relocate ELF sections");
 
 	/* Extend in our copy of phdrs so that vita_elf_vaddr_to_segndx can match it */
